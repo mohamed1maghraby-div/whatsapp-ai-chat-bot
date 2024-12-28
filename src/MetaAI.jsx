@@ -17,12 +17,15 @@ const MetaAI = () => {
   const setCurrentChatId = id => {
     dispatch(changeCurrentChatId({chatId: id}))
   }
-  console.log(JSON.stringify(chats))
+  // console.log(JSON.stringify(chats))
 
   return (
     <ImageBackground source={WABG} style={styles.container} resizeMode='cover'>
-      <CustomHeader chats={chats} currentChatId={currentChatId} setCurrentChatId={id => setCurrentChatId(id)}/>
-
+      <CustomHeader 
+        chats={chats} 
+        currentChatId={currentChatId} 
+        setCurrentChatId={id => setCurrentChatId(id)}
+      />
 
       <Chat 
         isTyping={isTyping}
@@ -37,7 +40,7 @@ const MetaAI = () => {
         setIsTyping={setIsTyping} 
         currentChatId={currentChatId}
         setCurrentChatId={id=>setCurrentChatId(id)}
-        lenght={chats?.find(chat=>chat.id==currentChatId)?.messages?.length || [].length}
+        length={chats?.find(chat=>chat.id==currentChatId)?.messages?.length || [].length}
         messages={chats?.find(chat=>chat.id==currentChatId)?.messages || []}
       />
     </ImageBackground>

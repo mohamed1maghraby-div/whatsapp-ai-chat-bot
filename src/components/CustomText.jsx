@@ -14,9 +14,10 @@ const CustomText=({
     return(
         <Text style={{
             fontSize: size,
-            color: color,
-            opacity: opacity,
-            fontWeight: fontWeight
+            color,
+            opacity,
+            fontWeight,
+            ...style
         }} {...props}>{children}</Text>
     )
 }

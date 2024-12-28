@@ -3,9 +3,12 @@ import React, { useEffect, useRef, useState } from 'react'
 import { RFValue } from 'react-native-responsive-fontsize'
 import useKeyboardOffsetHeight from '../helpers/useKeyboardOffsetHeight'
 import { useDispatch, useSelector } from 'react-redux'
-import { addMessage, createNewChat, selectChats, selectCurrentChatId } from '../redux/reducers/chatSlice'
+import { addAssistantMessage, addMessage, createNewChat, markMessageAsRead, selectChats, selectCurrentChatId, updateAssistantMessage, updateChatSummary } from '../redux/reducers/chatSlice'
 import { PaperAirplaneIcon } from 'react-native-heroicons/solid'
 import uuid from 'react-native-uuid'
+import EventSource from 'react-native-sse'
+import { HUGGING_API_KEY, HUGGING_FACE_API, HUGGING_FACE_URL, STABLE_DIFFUSION_KEY, STABLE_DIFFUSION_URL } from '../redux/API'
+import axios from 'axios'
 
 const windowHeight = Dimensions.get('window').height
 
@@ -23,6 +26,7 @@ const SendButton = (
     const chats = useSelector(selectChats);
     const currentChatId = useSelector(selectCurrentChatId);
     const animationValue = useRef(new Animated.Value(0)).current;
+    const TextInputRef = useRef(null);
 
     const [message, setMessage] = useState('');
     const keyboardOffsetHeight = useKeyboardOffsetHeight();
@@ -55,19 +59,213 @@ const SendButton = (
         ]
     }
 
-    const addChat = async (newId) => {
-        let selectedChatId = newId ? newId : currentChatId;
-        await dispatch(addMessage({
+    const fetchResponse = async (mes, selectedChatId) => {
+        let id = length + 2;
+        dispatch(addAssistantMessage({
             chatId: selectedChatId,
             message: {
-                content: message,
-                time: new Date().toString(),
-                role: 'assitant',
-                id: length + 1,
-                isMessageRead: false,
-                // isLoading: true,
-                imageUri : 'https://cdn.pixabay.com/photo/2023/03/21/16/24/ai-generated-7867633_1280.jpg'
+                content: 'Loading..',
+                time: mes.time,
+                role: 'assistant',
+                id: id,
+            },
+        }))
+
+        const eventSource = new EventSource(HUGGING_FACE_URL, {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${HUGGING_API_KEY}`,
+                'Content-Type': 'application/json',
+            },
+            pollingInterval: 0,
+            body: JSON.stringify({
+                model: 'meta-llama/Meta-Llama-3-8B-Instruct',
+                messages: [...messages, mes],
+                max_tokens: 500,
+                stream: true
+            })
+        })
+
+        let content='';
+        let responseCompelete = false;
+
+        eventSource.addEventListener('message', (event) => {
+            if(event.data !== '[DONE]'){
+                const parsedData = JSON.parse(event.data);
+                if(parsedData.choices && parsedData.choices.length>0){
+                    const delta = parsedData.choices[0].delta.content;
+                    if(delta){
+                        content += delta;
+                        dispatch(
+                            updateAssistantMessage({
+                                chatId: selectedChatId,
+                                message: {
+                                    content,
+                                    time: new Date().toString(),
+                                    role: 'assistant',
+                                    id: id
+                                },
+                                messageId: id
+                            })
+                        )
+                    }
+                }
+            }else{
+                responseCompelete = true;
+                eventSource.close();
             }
+        })
+
+        eventSource.addEventListener('error', (error) => {
+            console.log('Error:', error);
+            dispatch(
+                updateAssistantMessage({
+                    chatId: selectedChatId,
+                    message: {
+                        content: 'Oops! Something went wrong! 🤔',
+                        time: new Date().toString(),
+                        role: 'assistant',
+                        id: id
+                    },
+                    messageId: id
+                })
+            )
+            eventSource.close();
+        })
+
+        eventSource.addEventListener('close', () => {
+            if(!responseCompelete){
+                eventSource.close();
+            }
+        });
+
+        return () => {
+            eventSource.removeAllEventListeners();
+            eventSource.close();
+        }
+    }
+
+    const generateImage = async (mes, selectedChatId) => {
+        let id = length + 2;
+        dispatch(
+            addAssistantMessage({
+                chatId: selectedChatId,
+                message: {
+                    content: 'Loading..',
+                    time: mes.time,
+                    role: 'assistant',
+                    id: id,
+                }
+            })
+        );
+
+        try {
+            const res = await axios.post(STABLE_DIFFUSION_URL, {
+                key: STABLE_DIFFUSION_KEY,
+                prompt: message,
+                negative_prompt: 'low quality',
+                width: 512,
+                height: 512,
+                safety_checkers: false,
+                seed:null,
+                samples: 1,
+                base64: false,
+                webhook: null,
+                track_id: null
+            }, {
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+            })
+
+            dispatch(
+                updateAssistantMessage({
+                    chatId: selectedChatId,
+                    message: {
+                        content: res.data?.output[0],
+                        imageUri: res.data?.output[0],
+                        time: new Date().toString(),
+                        role: 'assistant',
+                        id: id
+                    },
+                    messageId: id
+                })
+            )
+        } catch (error) {
+            console.log('Error:', error);
+            dispatch(
+                updateAssistantMessage({
+                    chatId: selectedChatId,
+                    message: {
+                        content: 'Oops! Something went wrong! 🤔',
+                        time: new Date().toString(),
+                        role: 'assistant',
+                        id: id
+                    },
+                    messageId: id
+                })
+            )
+        }
+    }
+
+    const identifyImageApi = prompt => {
+        const imageRegex = /\b(generate\s*image|imagine)\b/i;
+        if(imageRegex.test(prompt)){
+            return true;
+        }else{
+            return false;
+        }
+    }
+
+    const addChat = async (newId) => {
+        let selectedChatId = newId ? newId : currentChatId;
+        let msgId = length + 1;
+        if(length == 0 && message.trim().length > 0){
+            dispatch(
+                updateChatSummary({
+                    chatId: selectedChatId,
+                    summary: message?.trim().slice(0, 40)
+                })
+            )
+        }
+
+        dispatch(
+            addMessage({
+                chatId: selectedChatId,
+                message: {
+                    content: message,
+                    time: new Date().toString(),
+                    role: 'user',
+                    id: msgId,
+                    isMessageRead: false,
+                    // isLoading: true,
+                    // imageUri : 'https://cdn.pixabay.com/photo/2023/03/21/16/24/ai-generated-7867633_1280.jpg'
+                }
+            })
+        )
+
+        setMessage('');
+        //comment if you want not to keyboard to dismiss after sending message
+        TextInputRef.current.blur();
+        setIsTyping(false);
+
+        let promptForAssitant = {
+            content: message,
+            time: new Date().toString(),
+            role: 'user',
+            id: msgId,
+            isMessageRead: false,
+        }
+
+        if(!identifyImageApi(message)){
+            fetchResponse(promptForAssitant, selectedChatId);
+        }else{
+            generateImage(promptForAssitant, selectedChatId);
+        }
+
+        dispatch(markMessageAsRead({
+            chatId: selectedChatId,
+            messageId: msgId
         }))
     }
 
@@ -79,7 +277,9 @@ const SendButton = (
         <View style={[styles.inputContainer, {width: isTyping ? '87%' : '100%'}]}>
             <TextInput 
                 editable
+                ref={TextInputRef}
                 multiline
+                value={message}
                 style={styles.textInput}
                 placeholder='Message'
                 onChangeText={handleTextChange}

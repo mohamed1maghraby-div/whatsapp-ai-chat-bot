@@ -1,11 +1,12 @@
 import { View, Text, StyleSheet, SafeAreaView, Touchable, TouchableOpacity, Image } from 'react-native'
-import React from 'react'
+import React, { useState } from 'react'
 import { Bars3BottomLeftIcon, CheckBadgeIcon } from 'react-native-heroicons/solid'
 import { RFValue } from 'react-native-responsive-fontsize'
 import MetaAILogo from '../assets/logo.gif'
 import CustomText from './CustomText'
 import { useDispatch } from 'react-redux'
 import { clearAllChats, clearChat } from '../redux/reducers/chatSlice'
+import SideDrawer from './SideDrawer'
 
 const CustomHeader = ({
     currentChatId,
@@ -19,11 +20,13 @@ const CustomHeader = ({
         dispatch(clearChat({chatId: currentChatId}))
     }
 
+    const [visible, setVisible] = useState(false);
+
   return (
     <View style={styles.container}>
         <SafeAreaView>
             <View style={styles.subContainer}>
-                <TouchableOpacity>
+                <TouchableOpacity onPress={() => setVisible(true)}>
                     <Bars3BottomLeftIcon size={RFValue(20)} color='white'/>
                 </TouchableOpacity>
 
@@ -48,6 +51,15 @@ const CustomHeader = ({
 
             </View>
         </SafeAreaView>
+        {visible && (
+            <SideDrawer 
+                setCurrentChatId={(id) => setCurrentChatId(id)}
+                chats={chats}
+                onPressHide={() => setVisible(false)}
+                visible={visible}
+                currentChatId={currentChatId}
+            />
+        )}
     </View>
   )
 }

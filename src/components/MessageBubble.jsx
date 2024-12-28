@@ -61,16 +61,7 @@ const MessageBubble = ({message}) => {
               code_inline: {
                 backgroundColor: '#1d211e',
                 color: 'white',
-                borderRadius: 5,
-                fence: {
-                  backgroundColor: '#1d211e',
-                  color: 'white',
-                  borderRadius: 5,
-                  borderWidth:0
-                },
-                tr: {
-                  borderColor: 'white',
-                }
+                borderRadius: 5
               }
             }}
           > 
